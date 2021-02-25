@@ -642,17 +642,442 @@ loss一般使用欧式距离来计算loss
 
 ![image-20210129144641089](images/image-20210129144641089.png)
 
- 
+#  手写数字问题
+
+```python
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import datasets, layers, optimizers, Sequential, metrics
+
+
+# 对数据进行预处理，把数据转换成方便处理的函数
+def preprocess(x, y):
+    x = tf.cast(x, dtype=tf.float32) / 255
+    y = tf.cast(y, dtype=tf.int32)
+    return x, y
+
+
+# 我们引入fashion mnist数据集，这个和手写字体的数据库是一样的
+(x, y), (x_test, y_test) = datasets.fashion_mnist.load_data()
+print(x.shape, y.shape)
+
+batchsz = 128
+
+db = tf.data.Dataset.from_tensor_slices((x, y))
+# 加载数据集，打乱后我们获取128组来作为一个batch
+db = db.map(preprocess).shuffle(10000).batch(batchsz)
+
+# 测试数据集也这样处理
+db_test = tf.data.Dataset.from_tensor_slices((x_test, y_test))
+# 加载数据集，打乱后我们获取128组来作为一个batch
+db_test = db_test.map(preprocess).batch(batchsz)
+
+# 初始化一个迭代器
+db_iter = iter(db)
+sample = next(db_iter)
+# 我们打印一下第一个batch的数据
+print('batch', sample[0].shape, sample[1].shape)
+# batch (128, 28, 28) (128,)
+
+# 新建一个网络(这里是一个五层的网络)
+model = Sequential([
+    layers.Dense(256, activation=tf.nn.relu),  # [b,784] => [b,256]
+    layers.Dense(128, activation=tf.nn.relu),  # [b,256] => [b,128]
+    layers.Dense(64, activation=tf.nn.relu),  # [b,128] => [b,64]
+    layers.Dense(32, activation=tf.nn.relu),  # [b,64] => [b,32]
+    layers.Dense(10)  # [b,32] => [b,10]
+])
+# 构建权值
+model.build(input_shape=[None, 28 * 28])
+# summary可以打印网络结构
+model.summary()
+
+# Model: "sequential"
+# _________________________________________________________________
+# Layer (type)                 Output Shape              Param #
+# =================================================================
+# dense (Dense)                (None, 256)               200960
+# _________________________________________________________________
+# dense_1 (Dense)              (None, 128)               32896
+# _________________________________________________________________
+# dense_2 (Dense)              (None, 64)                8256
+# _________________________________________________________________
+# dense_3 (Dense)              (None, 32)                2080
+# _________________________________________________________________
+# dense_4 (Dense)              (None, 10)                330
+# =================================================================
+# Total params: 244,522
+# Trainable params: 244,522
+# Non-trainable params: 0
+# _________________________________________________________________
+
+# 设置优化器
+optimizer = optimizers.Adam(lr=1e-3)
+
+
+def main():
+    # 设置训练次数
+    for epoch in range(30):
+        # 迭代数据集
+        for step, (x, y) in enumerate(db):
+            # x:[b,28,28] => [b,784]
+            # y:[b]
+            x = tf.reshape(x, [-1, 28 * 28])
+            with tf.GradientTape() as tape:
+                # [b,784] => [b,10] 这行代码可以完成所有网络的传播，不需要我们自己进行矩阵变换
+                logits = model(x)
+                y_onehot = tf.one_hot(y, depth=10)
+                # [b]
+                loss_mse = tf.reduce_mean(tf.losses.MSE(y_onehot, logits))
+                loss_ce = tf.losses.categorical_crossentropy(y_onehot, logits, from_logits=True)
+                loss_ce = tf.reduce_mean(loss_ce)
+            grads = tape.gradient(loss_ce, model.trainable_variables)
+            # 对参数进行原地更新
+            optimizer.apply_gradients(zip(grads, model.trainable_variables))
+            # 每100次，我们就打印一下loss
+            if step % 100 == 0:
+                print(epoch, step, 'loss:', float(loss_ce), float(loss_mse))
+        # 测试
+        total_correct = 0
+        total_num = 0
+        for x, y in db_test:
+            # x:[b,28,28] => [b,784]
+            # y:[b]
+            x = tf.reshape(x, [-1, 28 * 28])
+            # [b,10]
+            logits = model(x)
+            # logits => prob
+            prob = tf.nn.softmax(logits, axis=1)
+            # [b,10] => [b]
+            pred = tf.argmax(prob, axis=1)
+            pred = tf.cast(pred, dtype=tf.int32)
+            #  pred: [b]
+            #  y: [b]
+            #   correct: [b], 如果为真那么就是相等反之
+            correct = tf.equal(pred, y)
+            correct = tf.reduce_sum(tf.cast(correct, dtype=tf.int32))
+            total_correct += int(correct)
+            total_num += x.shape[0]
+
+        acc = total_correct / total_num
+        print(epoch, 'test acc:', acc)
+
+
+if __name__ == '__main__':
+    main()
+```
+
+# 可视化
+
+流程图如下：
+
+![image-20210217110514763](images/image-20210217110514763.png)
+
+使用TensorBoard可以对TensorFlow进行监控
+
+![image-20210217110945225](images/image-20210217110945225.png)
+
+另外一个
+
+![image-20210217111028768](images/image-20210217111028768.png)
 
 
 
+tensorBoard的部署和安装
+
+原理很简单，就是可以通过监听日志来显示数据变化
+
+# Keras高层接口
+
+# 动量与学习率
+
+# 卷积（计算机视觉）
+
+因为我们如果使用传统方式存储的话，那么无法存储这么多数据（当时算力有限）
+
+我们可能只对其中某些数据感兴趣，每次我们可以只关注局部内容
+
+![image-20210217120808079](images/image-20210217120808079.png)
+
+全连接层和局部连接层，可以极大的减少参数量
+
+![image-20210217142708724](images/image-20210217142708724.png)
+
+![image-20210217143039885](images/image-20210217143039885.png)
+
+卷积的计算公式如下
+
+![image-20210217143541094](images/image-20210217143541094.png)
+
+![image-20210217143647802](images/image-20210217143647802.png)
 
 
 
+使用卷积可以对图片进行各种变化
+
+![image-20210217144249210](images/image-20210217144249210.png)
+
+通过卷积操作，我们可以极大的减少维度信息
+
+![image-20210217144552252](images/image-20210217144552252.png)
+
+![image-20210217145000783](images/image-20210217145000783.png)
+
+# 池化和采样
+
+# 卷积神经网络实战
+
+我们来分类下面这样的数据集
+
+![image-20210217145840544](images/image-20210217145840544.png)
+
+我们这里使用了十三层的网络数据
+
+![image-20210217150025237](images/image-20210217150025237.png)
 
 
 
+```python
+import tensorflow as tf
+from tensorflow.keras import layers, optimizers, datasets, Sequential
 
+# 设置随机数种子
+tf.random.set_seed(2345)
+
+conv_layers = [  # 5 units of conv + max pooling
+    # unit 1（这里我们设置两个conv和一个max pool）
+    layers.Conv2D(64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.Conv2D(64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.MaxPool2D(pool_size=[2, 2], strides=2, padding="same"),
+
+    # unit 2
+    layers.Conv2D(128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.Conv2D(128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.MaxPool2D(pool_size=[2, 2], strides=2, padding="same"),
+
+    # unit 3
+    layers.Conv2D(256, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.Conv2D(256, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.MaxPool2D(pool_size=[2, 2], strides=2, padding="same"),
+
+    # unit 4
+    layers.Conv2D(512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.Conv2D(512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.MaxPool2D(pool_size=[2, 2], strides=2, padding="same"),
+
+    # unit 5
+    layers.Conv2D(512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.Conv2D(512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu),
+    layers.MaxPool2D(pool_size=[2, 2], strides=2, padding="same")
+
+]
+
+
+#  数据预处理
+def preprocess(x, y):
+    x = tf.cast(x, dtype=tf.float32) / 255
+    y = tf.cast(y, dtype=tf.int32)
+    return x, y
+
+
+#  加载数据
+(x, y), (x_test, y_test) = datasets.cifar100.load_data()
+# 对y进行降维操作
+y = tf.squeeze(y, axis=1)
+y_test = tf.squeeze(y_test, axis=1)
+print(x.shape, y.shape, x_test.shape, y_test.shape)
+# (50000, 32, 32, 3) (50000, 1) (10000, 32, 32, 3) (10000, 1)
+
+# 建立训练数据库
+train_db = tf.data.Dataset.from_tensor_slices((x, y))
+train_db = train_db.shuffle(1000).map(preprocess).batch(64)
+# 训练数据库
+test_db = tf.data.Dataset.from_tensor_slices((x_test, y_test))
+test_db = test_db.map(preprocess).batch(64)
+
+sample = next(iter(train_db))
+print('sample:', sample[0].shape, sample[1].shape)
+
+
+# sample: (64, 32, 32, 3) (64,)
+
+
+def main():
+    # 设置网络层结构 这我们把 [b,32,32,3] => [b,1,1,512]
+    conv_net = Sequential(conv_layers)
+    conv_net.build(input_shape=[None, 32, 32, 3])
+    # 下面我们创建全连接层(把256 转换为100)
+    fc_net = Sequential([
+        layers.Dense(256, activation=tf.nn.relu),
+        layers.Dense(128, activation=tf.nn.relu),
+        layers.Dense(100, activation=tf.nn.relu)
+    ])
+    fc_net.build(input_shape=[None, 512])
+
+    # 设置优化器
+    optimizer = optimizers.Adam(lr=1e-4)
+    # x = tf.random.normal([4,32,32,3])
+    # out = conv_net(x)
+    # print(out.shape)
+    # (4, 1, 1, 512)
+
+    # 扩阶操作
+    # [1,2] + [3,4] => [1,2,3,4]
+    variables = conv_net.trainable_variables + fc_net.trainable_variables
+    #  开始训练
+    for epoch in range(50):
+        for step, (x, y) in enumerate(train_db):
+            with tf.GradientTape() as tape:
+                # [b,32,32,3] => [b,1,1,512] reshape 操作
+                out = conv_net(x)
+                # flatten, => [b,512]
+                out = tf.reshape(out, [-1, 512])
+                # [b,512] => [b,100]
+                logits = fc_net(out)
+                # [b] => b[100]
+                y_onehot = tf.one_hot(y, depth=100)
+                # 计算loss
+                loss = tf.losses.categorical_crossentropy(y_onehot, logits, from_logits=True)
+                loss = tf.reduce_mean(loss)
+            #
+            grads = tape.gradient(loss, variables)
+            optimizer.apply_gradients(zip(grads, variables))
+
+            # 打印计算结果
+            if step % 100 == 0:
+                print(epoch, step, 'loss:', float(loss))
+                # 这里我们计算需要花费很长的时间
+        # 计算训练数据
+        total_num = 0
+        total_correct = 0
+        for x, y in test_db:
+            out = conv_net(x)
+            out = tf.reshape(out, [-1, 512])
+            logits = fc_net(out)
+
+            prob = tf.nn.softmax(logits, axis=1)
+            pred = tf.argmax(prob, axis=1)
+            pred = tf.cast(pred, dtype=tf.int32)
+
+            correct = tf.cast(tf.equal(pred, y), dtype=tf.int32)
+            correct = tf.reduce_sum(correct)
+
+            total_num += x.shape[0]
+            total_correct += int(correct)
+        acc = total_correct / total_num
+        print(epoch, 'acc:', acc)
+
+
+if __name__ == '__main__':
+    main()
+```
+
+这里计算非常耗时间。。。
+
+0 0 loss: 4.605395793914795
+0 100 loss: 4.608898162841797
+0 200 loss: 4.629358291625977
+0 300 loss: 4.538727760314941
+0 400 loss: 4.423356056213379
+0 500 loss: 4.414939880371094
+0 600 loss: 4.509277820587158
+0 700 loss: 4.351410865783691
+0 acc: 0.0449
+1 0 loss: 4.449063301086426
+1 100 loss: 4.28043270111084
+1 200 loss: 4.094503879547119
+1 300 loss: 4.288569927215576
+1 400 loss: 4.218705177307129
+
+Process finished with exit code -1
+
+# 经典卷积网络
+
+2012 年 alexNet
+
+![image-20210217165538494](images/image-20210217165538494.png)
+
+2014 VGG，第二名
+
+![image-20210217165842782](images/image-20210217165842782.png)
+
+2014 年 googleNet
+
+![image-20210217170306276](images/image-20210217170306276.png)
+
+2015年 resNet
+
+# ResNet与DenseNet
+
+denseNet 第一层可能和后面每一层都有接触
+
+![image-20210217173848976](images/image-20210217173848976.png)
+
+# ResNet实战
+
+代码不贴了，比较复杂
+
+# GRU
+
+![image-20210218101334116](images/image-20210218101334116.png)
+
+# LSTM
+
+针对梯度离散，我们提出了LSTM网络
+
+# 序列表示方法（Sequence）
+
+比如时间序列，我们说的话或者聊天都是序列化的，比如 我们的翻译，就用到了序列化
+
+# 循环神经网络
+
+感情分析
+
+![image-20210218103143499](images/image-20210218103143499.png)
+
+
+
+如果我们，每个单词都作为一层的话，打乱顺序也不会影响，但是实际对话中，我们需要结合上下文进行理解
+
+![image-20210218103428395](images/image-20210218103428395.png)
+
+
+
+我们可以通过多加一个参数来传递前文的语义信息
+
+![image-20210218103836213](images/image-20210218103836213.png)
+
+根据上面这些，我们就可以提出循环神经网络这个概念
+
+# RNN Layer 
+
+RNN可以用于情感分类（我们这里只把分类分为好评和差评）
+
+# 梯度离散和梯度爆炸
+
+# 无监督学习 （Auto-Encoders）
+
+我们之前的数据训练都是打过标签的，需要花大量时间。
+
+无监督学习其实有输出的，输出的就是自己，我们的目的就是重建自己（是一个特殊的全连接层）
+
+![image-20210218111347013](images/image-20210218111347013.png)
+
+
+
+为了避免我们的神经网络只记录像素信息，我们可以对图像加上噪声
+
+![image-20210218112117535](images/image-20210218112117535.png)
+
+当然我们也可以进行dropout操作，手动去掉一些点
+
+![image-20210218112250558](images/image-20210218112250558.png)
+
+# 对抗生成网络（GAN）
+
+![image-20210218113907030](images/image-20210218113907030.png)
+
+# 感知机
 
 
 
