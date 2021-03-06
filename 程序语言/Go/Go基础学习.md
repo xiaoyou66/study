@@ -84,9 +84,9 @@ case里是不需要用break的，因为go默认会加break。如果我们不想�
 go切片声明有下面这几种方式
 
 ```go
-1.make([]type, len)
-2.s :=[] int {1,2,3 } 
-3.make([]T, length, capacity)
+make([]type, len)
+s :=[] int {1,2,3 } 
+make([]T, length, capacity)
 ```
 
 capacity是容量，go的关键词中len用于计算切片或数组的长度，而cap用于计算切片的容量。capacity指的是切片最长可以是多少。
@@ -147,8 +147,8 @@ go的变量通常是无类型的，但是可以进行有类型的计算
 go通过指针变量p访问成员变量的时候，有下面这两种方式来访问
 
 ```
-1.p.name
-2.(*p).name
+p.name
+(*p).name
 ```
 
 为什么->不行呢，因为这个符号是用来操作管道的
